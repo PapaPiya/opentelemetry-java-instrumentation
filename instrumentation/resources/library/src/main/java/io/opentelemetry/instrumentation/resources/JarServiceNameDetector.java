@@ -5,7 +5,7 @@
 
 package io.opentelemetry.instrumentation.resources;
 
-import static java.util.logging.Level.FINE;
+import static java.util.logging.Level.INFO;
 
 import com.google.auto.service.AutoService;
 import io.opentelemetry.api.common.Attributes;
@@ -58,11 +58,19 @@ public final class JarServiceNameDetector implements ConditionalResourceProvider
     if (jarPath == null) {
       jarPath = getJarPathFromSunCommandLine();
     }
-    if (jarPath == null) {
+    String serviceName = null;
+    if (jarPath != null) {
+      serviceName = getServiceName(jarPath);
+    } else {
+      String className = getClassNameFromSunCommandLine();
+      if (className != null) {
+        serviceName = getServiceName(className);
+      }
+    }
+    if (serviceName == null) {
       return Resource.empty();
     }
-    String serviceName = getServiceName(jarPath);
-    logger.log(FINE, "Auto-detected service name from the jar file name: {0}", serviceName);
+    logger.log(INFO, "Auto-detected service name from the jar file name: {0}", serviceName);
     return Resource.create(Attributes.of(ResourceAttributes.SERVICE_NAME, serviceName));
   }
 
@@ -111,6 +119,19 @@ public final class JarServiceNameDetector implements ConditionalResourceProvider
   }
 
   @Nullable
+  private String getClassNameFromSunCommandLine() {
+    String programArguments = getSystemProperty.apply("sun.java.command");
+    if (programArguments == null) {
+      return null;
+    }
+    int nextSpace = programArguments.indexOf(' ', 0);
+    if (nextSpace == -1) {
+      return programArguments;
+    }
+    return programArguments.substring(0, nextSpace);
+  }
+
+  @Nullable
   private Path pathIfExists(String programArguments) {
     Path candidate;
     try {
@@ -125,6 +146,11 @@ public final class JarServiceNameDetector implements ConditionalResourceProvider
     String jarName = jarPath.getFileName().toString();
     int dotIndex = jarName.lastIndexOf(".");
     return dotIndex == -1 ? jarName : jarName.substring(0, dotIndex);
+  }
+
+  private static String getServiceName(String className) {
+    int dotIndex = className.lastIndexOf(".");
+    return dotIndex == -1 ? className : className.substring(dotIndex+1);
   }
 
   @Override

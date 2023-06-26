@@ -5,7 +5,6 @@
 
 package io.opentelemetry.javaagent.tooling.config;
 
-import static java.util.Collections.emptyMap;
 import static java.util.logging.Level.SEVERE;
 
 import io.opentelemetry.instrumentation.api.internal.ConfigPropertiesUtil;
@@ -15,6 +14,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.Logger;
@@ -22,6 +22,8 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 final class ConfigurationFile {
+
+  static final String GLOBAL_CONFIG_FILE = "/opt/keta-agent/config/global.properties";
 
   static final String CONFIGURATION_FILE_PROPERTY = "otel.javaagent.configuration-file";
 
@@ -41,21 +43,36 @@ final class ConfigurationFile {
 
   // visible for tests
   static Map<String, String> loadConfigFile() {
+    Map<String, String> globalConfig = loadGlobalConfigFile();
+    Map<String, String> agentConfig = loadAgentConfigFile();
+    globalConfig.forEach(agentConfig::putIfAbsent);
+    return agentConfig;
+  }
+
+  static Map<String, String> loadGlobalConfigFile() {
+    return loadConfigFromFile(GLOBAL_CONFIG_FILE);
+  }
+
+  static Map<String, String> loadAgentConfigFile() {
     // Reading from system property first and from env after
     String configurationFilePath = ConfigPropertiesUtil.getString(CONFIGURATION_FILE_PROPERTY);
     if (configurationFilePath == null) {
-      return emptyMap();
+      return new HashMap<>();
     }
 
     // Normalizing tilde (~) paths for unix systems
     configurationFilePath =
         configurationFilePath.replaceFirst("^~", System.getProperty("user.home"));
 
+    return loadConfigFromFile(configurationFilePath);
+  }
+
+  static Map<String, String> loadConfigFromFile(String configurationFilePath) {
     // Configuration properties file is optional
     File configurationFile = new File(configurationFilePath);
     if (!configurationFile.exists()) {
       fileLoadErrorMessage = "Configuration file \"" + configurationFilePath + "\" not found.";
-      return emptyMap();
+      return new HashMap<>();
     }
 
     Properties properties = new Properties();
